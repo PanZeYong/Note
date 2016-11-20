@@ -96,6 +96,7 @@ public class MainActivity extends AppCompatActivity {
     }
 }
 ```
+
 activity.xml
 
 ```xml
@@ -120,23 +121,28 @@ activity.xml
         android:text="View事件分发机制"/>
 </RelativeLayout>
 ```
+
 运行该程序，然后点击按钮，打印日志如下：
 
-![](/Users/Pan/Github/Note/Android/Images/logcat_one.png)
+<!--![](/Users/Pan/Github/Note/Android/Images/logcat_one.png)-->
+![](/https://github.com/PanZeYong/Note/blob/master/Android/Images/logcat_one.png)
 
-可见，我们注册的监听器的回调方法都被调用了。并且**onTouch先于onClick**被调用，说明**onTouch优先级高于onClck**<font color="red">（**此处标记为问题1**）</font>。同时，**onTouch先于onTouchEvent**被调用，也说明**onTouch优先级高于onTouchEvent**<font color="red">（**此处标记为问题2**）</font>。那么，onClick的调用与onTouchEvent的调用有没有关系呢？我们可以来测试下，取消onClikcListener监听器注册，看看日志：
+&emsp;&emsp;可见，我们注册的监听器的回调方法都被调用了。并且**onTouch先于onClick**被调用，说明**onTouch优先级高于onClck**<font color="red">（**此处标记为问题1**）</font>。同时，**onTouch先于onTouchEvent**被调用，也说明**onTouch优先级高于onTouchEvent**<font color="red">（**此处标记为问题2**）</font>。那么，onClick的调用与onTouchEvent的调用有没有关系呢？我们可以来测试下，取消onClikcListener监听器注册，看看日志：
 
-![](/Users/Pan/Github/Note/Android/Images/logcat_three.png)
+<!--![](/Users/Pan/Github/Note/Android/Images/logcat_three.png)-->
+![](https://github.com/PanZeYong/Note/blob/master/Android/Images/logcat_three.png)
 
-从日志可以得知，**onClick**方法没有被调用，这是肯定的；但**onTouchEvent**方法依然被调用。那么有没有一种可能是onClick在onTouchEvent**满足一定条件被调用**呢<font color="red">（**此处标记为问题3**）</font>，想要知道答案，唯独看源码才知道，下面会有源码解析的。
+&emsp;&emsp;从日志可以得知，**onClick**方法没有被调用，这是肯定的；但**onTouchEvent**方法依然被调用。那么有没有一种可能是onClick在onTouchEvent**满足一定条件被调用**呢<font color="red">（**此处标记为问题3**）</font>，想要知道答案，唯独看源码才知道，下面会有源码解析的。
 
 &emsp;&emsp;不过不知你们有没有注意到，**onTouch**是有返回值的，上面是返回false；如果改为返回true，结果又会是怎样呢？再次运行程序，然后点击按钮，打印日志如下：
 
-![](/Users/Pan/Github/Note/Android/Images/logcat_two.png)
+<!--![](/Users/Pan/Github/Note/Android/Images/logcat_two.png)-->
+![](https://github.com/PanZeYong/Note/blob/master/Android/Images/logcat_two.png)
 
-由日志可知，我们注册onClickListener监听器的回调方法onClick和onTouchEvent方法都没有被调用，说明onTouch的返回值会关系到onTouchEvent和onClick这两个方法是否被调用<font color="red">（**此处标记为问题4**）。</font>那么要解决以上几个问题，唯独从源码入手才能找到答案。那么该从哪里入手呢？从日志可以看出，都是先调用dispatchTouchEvent方法，很显然从该方法入手。所以跳到Button类查找，结果发现没有；再跳到Button的父类TextView查找也没有，也没有；最后跳到View，终于找到。源码如下：
+&emsp;&emsp;由日志可知，我们注册onClickListener监听器的回调方法onClick和onTouchEvent方法都没有被调用，说明onTouch的返回值会关系到onTouchEvent和onClick这两个方法是否被调用<font color="red">（**此处标记为问题4**）。</font>那么要解决以上几个问题，唯独从源码入手才能找到答案。那么该从哪里入手呢？从日志可以看出，都是先调用dispatchTouchEvent方法，很显然从该方法入手。所以跳到Button类查找，结果发现没有；再跳到Button的父类TextView查找也没有，也没有；最后跳到View，终于找到。源码如下：
 
 ##### View dispatchTouchEvent方法解析
+
 ```java
 public boolean dispatchTouchEvent(MotionEvent event) {
         // If the event should be handled by accessibility focus first.
@@ -190,7 +196,8 @@ public boolean dispatchTouchEvent(MotionEvent event) {
 	return result;
 }
 ```
-第14-16行代码主要是安全验证；重点来看第24-37行代码，第24行代码主要是对事件进行安全过滤；第30行是if语句，有**四**个条件,如果这四个条件都为ture的话，result变量被赋值为**true**,同时也作为返回值返回。那么这四个条件具体是啥呢？
+
+&emsp;&emsp;第14-16行代码主要是安全验证；重点来看第24-37行代码，第24行代码主要是对事件进行安全过滤；第30行是if语句，有**四**个条件,如果这四个条件都为ture的话，result变量被赋值为**true**,同时也作为返回值返回。那么这四个条件具体是啥呢？
 
 - `li != null`：第29行已经对li变量进行赋值了，那么**mListenerInfo**这个变量又是怎么被赋值呢？经过一番查找，在View找到**getListenerInfo()**方法，代码如下
 	
@@ -211,7 +218,7 @@ public boolean dispatchTouchEvent(MotionEvent event) {
 - `(mViewFlags & ENABLED_MASK) == ENABLED`：这个条件主要判断控件的状态，即控件是否处于**enabled**状态。例如，Button默认值为true，而TextView、ImageView默认值为false。
 - `li.mOnTouchListener.onTouch(this, event)`：该条件是根据onTouch()方法的返回值来决定，而该方法是接口OnTouchListener的回调方法，默认是空方法，需要我们自己重写。如果我们返回true的话，该条件成立，即true；如果我们返回false的话，该条件不成立，即false。
 
-根据这四个条件的分析，我们可以用它们来解决以上遗留的问题。如果这四个条件其中有一个为false时，第34-36行才会被执行，**onTouchEvent**方法才会被调用。如果这四个条件都为true的话，**onTouchEvent**方法就不会被调用。这也就解决了**问题2**。那么调用了onTouchEvent，它又是何方神圣呢？找到源码如下：
+&emsp;&emsp;根据这四个条件的分析，我们可以用它们来解决以上遗留的问题。如果这四个条件其中有一个为false时，第34-36行才会被执行，**onTouchEvent**方法才会被调用。如果这四个条件都为true的话，**onTouchEvent**方法就不会被调用。这也就解决了**问题2**。那么调用了onTouchEvent，它又是何方神圣呢？找到源码如下：
 
 ##### View onTouchEvent方法解析
 
@@ -225,7 +232,8 @@ public boolean onTouchEvent(MotionEvent event) {	final float x = event.getX();
                                     case MotionEvent.ACTION_CANCEL:                    setPressed(false);                    removeTapCallback();                    removeLongPressCallback();                    mInContextButtonPress = false;                    mHasPerformedLongPress = false;                    mIgnoreNextUpEvent = false;                    break;
                                     case MotionEvent.ACTION_MOVE:                    drawableHotspotChanged(x, y);                    // Be lenient about moving outside of buttons                    if (!pointInView(x, y, mTouchSlop)) {                        // Outside button                        removeTapCallback();                        if ((mPrivateFlags & PFLAG_PRESSED) != 0) {                            // Remove any future long press/tap checks                            removeLongPressCallback();                            setPressed(false);                        }                    }                    break;            }            return true;        }        return false;    }
 ```
-第6-13行代码主要功能是即使控件处于**disabled状态**，也能对**消费事件**，只是不会做出反应，不会影响**ouTouchEvent**返回值。从第20行代码开始是对点击事件的具体处理，从if语句可以看出，只要View的**CLICKABLE**和**LONG_CLICKABLE**其中一个为**true**，**onTounchEvent**就会返回**true**，即**消费事件**。而**CLICKABLE默认为true，LONG_CLICKABLE默认为false**，因此**ouTouchEvent默认返回true**，即消费事件；除非View被设置为不可点击状态（clickable）和LONG_CLICKABLE同时为false，onTouchEvent才返回false.	进入if语句后，switch语句对点击事件action进行判断，分别有ACTION_DOWN、ACTION_MOVE、ACTION_UP、ACTION_CANCEL.看第38-54行，当处于ACTION_UP状态时，会调用performClick()方法，那么该方法具体执行什么操作呢，定位到该方法源码
+
+&emsp;&emsp;第6-13行代码主要功能是即使控件处于**disabled状态**，也能对**消费事件**，只是不会做出反应，不会影响**ouTouchEvent**返回值。从第20行代码开始是对点击事件的具体处理，从if语句可以看出，只要View的**CLICKABLE**和**LONG_CLICKABLE**其中一个为**true**，**onTounchEvent**就会返回**true**，即**消费事件**。而**CLICKABLE默认为true，LONG_CLICKABLE默认为false**，因此**ouTouchEvent默认返回true**，即消费事件；除非View被设置为不可点击状态（clickable）和LONG_CLICKABLE同时为false，onTouchEvent才返回false.	进入if语句后，switch语句对点击事件action进行判断，分别有ACTION_DOWN、ACTION_MOVE、ACTION_UP、ACTION_CANCEL.看第38-54行，当处于ACTION_UP状态时，会调用performClick()方法，那么该方法具体执行什么操作呢，定位到该方法源码
 
 ```java
 /**
@@ -273,7 +281,7 @@ public void setOnClickListener(@Nullable OnClickListener l) {
 }
 ```
 
-先判断View是否处于可点击状态，然后再对变量**mOnClickListener**赋值。也就是说，一旦我们注册OnClickListener监听器，**mOnClickListener**就不为null，以上if语句条件就成立，**OnClickListener**接口的回调方法**onClick()**就会被调用，而该方法又是空实现，需要我们自己重写，实现自己的逻辑。到这里，基本都解决以上遗留的问题了。
+&emsp;&emsp;先判断View是否处于可点击状态，然后再对变量**mOnClickListener**赋值。也就是说，一旦我们注册OnClickListener监听器，**mOnClickListener**就不为null，以上if语句条件就成立，**OnClickListener**接口的回调方法**onClick()**就会被调用，而该方法又是空实现，需要我们自己重写，实现自己的逻辑。到这里，基本都解决以上遗留的问题了。
 
 小结
 
@@ -287,7 +295,8 @@ public void setOnClickListener(@Nullable OnClickListener l) {
 
 ### ViewGroup事件分发机制
 
-老规矩，还是从一个简单的demo说起，代码如下
+&emsp;&emsp;老规矩，还是从一个简单的demo说起，代码如下
+
 CustomLayout.java
 
 ```java
@@ -349,6 +358,7 @@ public class CustomLayout extends LinearLayout {
     }
 }
 ```
+
 MainActivity.java
 
 ```java
@@ -502,31 +512,37 @@ activity_view_group.xml
 
 运行效果如下
 
-<center>![](/Users/Pan/Github/Note/Android/Images/result.png)</center>
+<!--<center>![](/Users/Pan/Github/Note/Android/Images/result.png)</center>-->
+<center>![](https://github.com/PanZeYong/Note/blob/master/Android/Images/result.png)</center>
 
 接下来看不同种情况下的点击事件
 
 - 点击BUTTON 1,打印日志如下：
 
-	![](/Users/Pan/Github/Note/Android/Images/logcat_four.png)
+	<!--![](/Users/Pan/Github/Note/Android/Images/logcat_four.png)-->
+	![](https://github.com/PanZeYong/Note/blob/master/Android/Images/logcat_four.png)
 	
 - 点击BUTTON 2,打印日志如下：
 	
-	![](/Users/Pan/Github/Note/Android/Images/logcat_five.png)
+	<!--![](/Users/Pan/Github/Note/Android/Images/logcat_five.png)-->
+	![](https://github.com/PanZeYong/Note/blob/master/Android/Images/logcat_five.png)
 	
 - 点击蓝色区域，打印日志如下
 
-	![](/Users/Pan/Github/Note/Android/Images/logcat_six.png)
+	<!--![](/Users/Pan/Github/Note/Android/Images/logcat_six.png)-->
+	![](https://github.com/PanZeYong/Note/blob/master/Android/Images/logcat_six.png)
 
 - 点击白色区域，打印日志如下
 
-	![](/Users/Pan/Github/Note/Android/Images/logcat_seven.png)
+	<!--![](/Users/Pan/Github/Note/Android/Images/logcat_seven.png)-->
+	![](https://github.com/PanZeYong/Note/blob/master/Android/Images/logcat_seven.png)
 	
 &emsp;&emsp;从以上可以看出，每当点击View时，都会先调用Activity方法dispatchTouchEvent，接着调用View父布局方法dispatchTouchEvent，再调用View方法dispatchTouchEvent，接下来方法调用就跟之前分析View一样。可以看出，View的事件分发是从Activity开始，然后传递给View父布局，再传递给View本身？那么如果在某一阶段对事件不分发，又会出现怎样的结果呢？先从View开始测试，假如BUTTON 2方法dispatchTouchEvent返回false，打印日志如下
 
-![](/Users/Pan/Github/Note/Android/Images/logcat_eight.png)
+<!--![](/Users/Pan/Github/Note/Android/Images/logcat_eight.png)-->
+![](https://github.com/PanZeYong/Note/blob/master/Android/Images/logcat_eight.png)
 
-当事件传递到View时，如果View不对事件进行分发，即不消费事件时，事件又会再回传给它的父布局，由父布局对事件消费。那如果父布局不对事件进行消费，事件应该是回传给Activity进行消费。是不是这样呢，以下通过源码分析会给出答案的<font color="red">**问题5**</font>。
+&emsp;&emsp;当事件传递到View时，如果View不对事件进行分发，即不消费事件时，事件又会再回传给它的父布局，由父布局对事件消费。那如果父布局不对事件进行消费，事件应该是回传给Activity进行消费。是不是这样呢，以下通过源码分析会给出答案的<font color="red">**问题5**</font>。
 
 &emsp;&emsp;不知有没有发现，这里多了方法onInterceptTouchEvent方法调用，该方法只有ViewGroup才有，View没有；并且该方法有返回值，数据类型为boolean，那么该方法不同的返回值又会产生怎样的影响呢？以下会揭晓的。
 
@@ -556,7 +572,7 @@ public boolean dispatchTouchEvent(MotionEvent ev) {
 }
 ```
 
-第2-4行代码大概是事件出ACTION_DOWN状态时，调用**onUserInteraction**，该方法是空实现，需要的话可以重写，调用时机是Activity退到后台时会被调用。接着再看第16-18行代码，首先事件交给Activity所附属的Window进行分发，如果`getWindow().superDispatchTouchEvent(ev)`返回true，Activity方法dispatchTouchEvent返回true，对事件进行分发，即消费事件，整个事件循环也就结束；如果返回false，所有View的onTouchEvent会被调用，Activity的onTouchEvent方法也会被调用。那么Window方法superDispatchTouchEvent具体实现是什么呢？得来看它的代码。由于Window是抽象类，得找到它的实现类，而它的实现类时PhoneWindow，定位到superDispatchTouchEvent方法，源码如下：
+&emsp;&emsp;第2-4行代码大概是事件出ACTION_DOWN状态时，调用**onUserInteraction**，该方法是空实现，需要的话可以重写，调用时机是Activity退到后台时会被调用。接着再看第16-18行代码，首先事件交给Activity所附属的Window进行分发，如果`getWindow().superDispatchTouchEvent(ev)`返回true，Activity方法dispatchTouchEvent返回true，对事件进行分发，即消费事件，整个事件循环也就结束；如果返回false，所有View的onTouchEvent会被调用，Activity的onTouchEvent方法也会被调用。那么Window方法superDispatchTouchEvent具体实现是什么呢？得来看它的代码。由于Window是抽象类，得找到它的实现类，而它的实现类时PhoneWindow，定位到superDispatchTouchEvent方法，源码如下：
 
 ```java
 @Override
@@ -565,7 +581,7 @@ public boolean superDispatchTouchEvent(MotionEvent event) {
 }
 ```
 
-很明显PhoneWindow直接将事件分发给mDecor，那么mDecor又是什么呢？之前写过的一篇笔记：Android学习笔记：浅析setContentView，该笔记有记录过。这里稍微说下，mDecor是Decor对象，通过`getWindow().getDecorView()`可以获取到mDecor对象，通过`findViewById(R.id.content)`可以获取到我们通过setContentView设置View,也就是说，我们平时通过setContentView所设置的View是DecorView的子类。那么接下来看` mDecor.superDispatchTouchEvent(event);`具体实现
+&emsp;&emsp;很明显PhoneWindow直接将事件分发给mDecor，那么mDecor又是什么呢？之前写过的一篇笔记：Android学习笔记：浅析setContentView，该笔记有记录过。这里稍微说下，mDecor是Decor对象，通过`getWindow().getDecorView()`可以获取到mDecor对象，通过`findViewById(R.id.content)`可以获取到我们通过setContentView设置View,也就是说，我们平时通过setContentView所设置的View是DecorView的子类。那么接下来看` mDecor.superDispatchTouchEvent(event);`具体实现
 
 ```java
 public boolean superDispatchTouchEvent(MotionEvent event) {
@@ -573,7 +589,7 @@ public boolean superDispatchTouchEvent(MotionEvent event) {
 }
 ```
 
-该方法调用父类dispatchTouchEvent方法，而DecorView的父类是FrameLayout,所以到FrameLayout类查找有没有dispatchTouchEvent方法，结果发现没有；那么到FrameLayout的父类ViewGroup查找，结果找到了，一切的奥秘都在这个方法里。
+&emsp;&emsp;该方法调用父类dispatchTouchEvent方法，而DecorView的父类是FrameLayout,所以到FrameLayout类查找有没有dispatchTouchEvent方法，结果发现没有；那么到FrameLayout的父类ViewGroup查找，结果找到了，一切的奥秘都在这个方法里。
 
 ##### ViewGroup dispatchTouchEvent方法解析
 
@@ -779,7 +795,7 @@ public boolean dispatchTouchEvent(MotionEvent ev) {
 		return handled;
 }
 ```
-从第26行看起，从注释可以看出检查是否拦截。从if语句可以看出有两个条件：
+&emsp;&emsp;从第26行看起，从注释可以看出检查是否拦截。从if语句可以看出有两个条件：
 
 - `actionMasked == MotionEvent.ACTION_DOWN`
 - `mFirstTouchTarget != null`
@@ -868,7 +884,7 @@ if (child == null) {
 }
 ```
 
-由上面可以知道，变量**mChild**不为空，所以会调用子View**dispatchTouchEvent方法**，至于View方法**dispatchTouchEvent**解析看上面。如果View方法**dispatchTouchEvent**返回true的话，就会进入该if语句，主要看第125行，调用方法`addTouchTarget(child, idBitsToAssign);`那么该方法是什么呢？进去瞧瞧
+&emsp;&emsp;由上面可以知道，变量**mChild**不为空，所以会调用子View**dispatchTouchEvent方法**，至于View方法**dispatchTouchEvent**解析看上面。如果View方法**dispatchTouchEvent**返回true的话，就会进入该if语句，主要看第125行，调用方法`addTouchTarget(child, idBitsToAssign);`那么该方法是什么呢？进去瞧瞧
 
 ```java
  /**
@@ -883,7 +899,7 @@ private TouchTarget addTouchTarget(@NonNull View child, int pointerIdBits) {
 }
 ```
 
-原来是对变量**mFirestTouchTarget（自己对该变量理解不是很懂）**赋值。接下来看第150行代码，如果变量**mFirstTouchTarget**为null,说明没有合适的子View处理事件，有两种情况：**ViewGroup没有字元素**或者子View方法**dispatchTouchEvent**方法返回false。那么就会执行第152行，从以上方法** dispatchTransformedTouchEvent**源码可以看出会调用View方法**dispatchTouchEvent**；否则就会执行else语句。
+&emsp;&emsp;原来是对变量**mFirestTouchTarget（自己对该变量理解不是很懂）**赋值。接下来看第150行代码，如果变量**mFirstTouchTarget**为null,说明没有合适的子View处理事件，有两种情况：**ViewGroup没有字元素**或者子View方法**dispatchTouchEvent**方法返回false。那么就会执行第152行，从以上方法** dispatchTransformedTouchEvent**源码可以看出会调用View方法**dispatchTouchEvent**；否则就会执行else语句。
 
 &emsp;&emsp;小结
 
